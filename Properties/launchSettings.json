@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "WebAuto": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}
