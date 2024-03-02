@@ -15,11 +15,7 @@ namespace WebAuto
         private readonly string _filename = Path.Combine(Application.UserAppDataPath, "..\\store\\Setting.json");
         private readonly string _outputPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "WebAutoOutput");
 #endif
-        private static readonly Store _store = new();
-        public static Store GetInstance()
-        {
-            return _store;
-        }
+        public static Store Instance { get; } = new();
 
         private class ItemInfo
         {
@@ -59,13 +55,9 @@ namespace WebAuto
             {
                 throw new ArgumentNullException(nameof(IV));
             }
-
-            byte[] encrypted;
-
             // Create an Aes object
             // with the specified key and IV.
-            using (Aes aesAlg = Aes.Create())
-            {
+            using Aes aesAlg = Aes.Create();
                 aesAlg.Key = Key;
                 aesAlg.IV = IV;
 
@@ -80,17 +72,11 @@ namespace WebAuto
                     //Write all data to the stream.
                     swEncrypt.Write(plainText);
                 }
-                encrypted = msEncrypt.ToArray();
-            }
-
-            // Return the encrypted bytes from the memory stream.
-            return encrypted;
+            return msEncrypt.ToArray();
         }
         static string DecryptStringFromBytes_Aes(byte[] cipherText, byte[] Key, byte[] IV)
         {
-            // Check arguments.
-            byte[] cipherText1 = cipherText;
-            if (cipherText1 == null || cipherText.Length <= 0)
+            if (cipherText == null || cipherText.Length <= 0)
             {
                 throw new ArgumentNullException(nameof(cipherText));
             }
@@ -102,15 +88,9 @@ namespace WebAuto
             {
                 throw new ArgumentNullException(nameof(IV));
             }
-
-            // Declare the string used to hold
-            // the decrypted text.
-            string plaintext = "";
-
             // Create an Aes object
             // with the specified key and IV.
-            using (Aes aesAlg = Aes.Create())
-            {
+            using Aes aesAlg = Aes.Create();
                 aesAlg.Key = Key;
                 aesAlg.IV = IV;
 
@@ -124,10 +104,7 @@ namespace WebAuto
 
                 // Read the decrypted bytes from the decrypting stream
                 // and place them in a string.
-                plaintext = srDecrypt.ReadToEnd();
-            }
-
-            return plaintext;
+            return srDecrypt.ReadToEnd();
         }
         //
         private class Item
@@ -139,21 +116,22 @@ namespace WebAuto
             [JsonPropertyName("vz")]
             public string? AesIV { get; set; }
         }
+
+        private static readonly JsonSerializerOptions options = new()
+        {
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        };
+
         public bool Load()
         {
             try
             {
                 FileStream fs = new(_filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                List<Item>? tmpList = JsonSerializer.Deserialize<List<Item>>(fs, new JsonSerializerOptions()
-                {
-                    Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-                });
+                List<Item> tmpList = JsonSerializer.Deserialize<List<Item>>(fs, options) ?? [];
                 fs.Close();
                 fs.Dispose();
                 _itemList.Clear();
                 InitValue();
-                if (null != tmpList)
-                {
                     foreach (Item item in tmpList)
                     {
                         ItemInfo tmpItem = new()
@@ -169,7 +147,6 @@ namespace WebAuto
                         _itemList[item.Name] = tmpItem;
                     }
                 }
-            }
             catch
             {
                 return false;
@@ -180,9 +157,9 @@ namespace WebAuto
         public bool Save()
         {
             List<Item> tmpList = [];
-            using (Aes myAes = Aes.Create())
+            using Aes myAes = Aes.Create();
+            foreach (KeyValuePair<string, ItemInfo> item in _itemList)
             {
-                foreach(KeyValuePair<string, ItemInfo> item in _itemList){
                     if (item.Value is ItemInfo itemInfo)
                     {
                         Item tmpItem = new()
@@ -200,12 +177,8 @@ namespace WebAuto
                         tmpList.Add(tmpItem);
                     }
                 }
-            }
             FileStream fs = new(_filename, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
-            JsonSerializer.Serialize(fs, tmpList, new JsonSerializerOptions()
-            {
-                Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-            });
+            JsonSerializer.Serialize(fs, tmpList, options);
             fs.Close();
             fs.Dispose();
             return true;

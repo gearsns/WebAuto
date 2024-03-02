@@ -11,7 +11,13 @@ namespace WebAuto
         private const string DefaultUrlForAddedTabs = "about:blank";
 
         private readonly Dictionary<string, Form> formMap = [];
-        private string _title;
+        private readonly string _title;
+
+        private JsonSerializerOptions options = new()
+        {
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        };
+
         public FormBrowser()
         {
             InitializeComponent();
@@ -27,21 +33,14 @@ namespace WebAuto
                 try
                 {
                     FileStream fs = new(filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    JsonSerializerOptions options = new()
-                    {
-                        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-                    };
-                    List<Item>? tmpList = JsonSerializer.Deserialize<List<Item>>(fs, options);
+                    List<Item> tmpList = JsonSerializer.Deserialize<List<Item>>(fs, options) ?? [];
                     fs.Close();
                     fs.Dispose();
-                    if (null != tmpList)
-                    {
                         foreach (Item item in tmpList)
                         {
                             AddMenuItem(item.Name, item.Href);
                         }
                     }
-                }
                 catch { }
             }
             AddMenuItem("その他 リンク", "https://gears.webauto.local/link.html");
@@ -60,8 +59,7 @@ namespace WebAuto
         {
             form.TopLevel = false;
             panelToolBody.Controls.Add(form);
-            form.Size = panelToolBody.Size;
-            form.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom;
+            form.Dock = DockStyle.Fill;
             formMap[name] = form;
         }
         private void SwitchForm(string name)
@@ -104,8 +102,18 @@ namespace WebAuto
             tabControlBrowser.ResumeLayout(true);
 
         }
-        public void AddTab(Microsoft.Web.WebView2.Core.CoreWebView2NewWindowRequestedEventArgs e)
+        public void AddTab(Microsoft.Web.WebView2.Core.CoreWebView2NewWindowRequestedEventArgs e, TabPage? tabPage = null)
         {
+            int index = 0;
+            foreach (object? b in tabControlBrowser.Controls)
+            {
+                if (b == tabPage)
+                {
+                    AddTab(new BrowserTabUserControl(e), index + 1);
+                    return;
+                }
+                ++index;
+            }
             AddTab(new BrowserTabUserControl(e));
         }
         public void AddTab(string url, int? insertIndex = null, bool bSelectdTab = true)
@@ -115,6 +123,22 @@ namespace WebAuto
         public void RemoveTab(TabPage tabPage)
         {
             tabControlBrowser.RemoveTab(tabPage);
+        }
+        public void SelectPrevTab(TabPage tabPage)
+        {
+            int index = 0;
+            foreach (object? b in tabControlBrowser.Controls)
+            {
+                if (b == tabPage)
+                {
+                    if (index > 0)
+                    {
+                        tabControlBrowser.SelectedIndex = index - 1;
+                    }
+                    return;
+                }
+                ++index;
+            }
         }
         public void SelectTab(TabPage tabPage)
         {
@@ -224,7 +248,6 @@ namespace WebAuto
         public delegate void InputDataCallback();
         private CancellationTokenSource _cancellationTokenSource = new();
         private uint _runningFrame;
-        private BrowserTabUserControl? _runningControl;
 
         public void CancelInputData()
         {
@@ -265,7 +288,7 @@ namespace WebAuto
             int inputPageWaitTime = 1000;
             try
             {
-                inputPageWaitTime = Math.Max(int.Parse(Store.GetInstance().GetValue("InputPageWaitTime")), inputPageWaitTime);
+                inputPageWaitTime = Math.Max(int.Parse(Store.Instance.GetValue("InputPageWaitTime")), inputPageWaitTime);
             }
             catch { }
             MyDataGridViewInput.ReadOnly = true;
@@ -279,11 +302,6 @@ namespace WebAuto
                         {
                             return;
                         }
-                        _runningControl = control;
-                        JsonSerializerOptions options = new()
-                        {
-                            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-                        };
                         {
                             string filename = Path.GetFullPath(@".\script\input.js");
                             if (File.Exists(filename))
@@ -323,17 +341,10 @@ namespace WebAuto
                             string v = row.GetCellString("ColumnValue")
                                 .Replace("\r", "")
                                 .Replace("\n", "\r\n");
-                            if (k == "(frame)")
-                            {
-                                //_runningFrame = frame = await control.GetFrame(v) ?? frame;
-                            }
-                            else if (k == "URL")
+                            if (k == "URL")
                             {
                                 control.LoadEnd = false;
-                                this.Invoke(() =>
-                                {
-                                    control.LoadUrl(v);
-                                });
+                                Invoke(() => control.LoadUrl(v));
                                 for (int i = 0; i < 100; ++i)
                                 {
                                     await Task.Delay(inputPageWaitTime);
@@ -393,7 +404,6 @@ namespace WebAuto
                         {
                             inputDataCallback?.Invoke();
                             _runningFrame = 0;
-                            _runningControl = null;
                         });
                     }
                 }, _cancellationTokenSource.Token);

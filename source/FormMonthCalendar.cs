@@ -10,8 +10,8 @@
         private void FormMonthCalendar_Load(object sender, EventArgs e)
         {
             ClientSize = monthCalendar.Size;
-            Left = Cursor.Position.X - ClientSize.Width / 2;
-            Top = Cursor.Position.Y - ClientSize.Height / 2;
+            Left = Cursor.Position.X - (ClientSize.Width / 2);
+            Top = Cursor.Position.Y - (ClientSize.Height / 2);
             Rectangle rect = Screen.FromControl(this).WorkingArea;
             if(rect.Bottom < Bottom)
             {

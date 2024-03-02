@@ -22,7 +22,7 @@ namespace WebAuto
             {
                 Uri uri = new($"{Application.StartupPath}\\Template");
                 string[] dirs = Directory.GetFiles(uri.AbsolutePath.ToString(), "*.json");
-                List<string> template_list = new();
+                List<string> template_list = [];
                 foreach (string f in dirs)
                 {
                     try
@@ -42,7 +42,7 @@ namespace WebAuto
         }
         private void ButtonInput_Click(object sender, EventArgs e)
         {
-            if (null != Parent && Parent.FindForm() is FormBrowser owner)
+            if (Parent?.FindForm() is FormBrowser owner)
             {
                 buttonInput.Visible = false;
                 buttonCancel.Visible = true;
@@ -61,30 +61,32 @@ namespace WebAuto
         }
         private class Item
         {
-            public List<ItemValue> Cond { get; set; } = new();
-            public List<ItemValue> Field { get; set; } = new();
+            public List<ItemValue> Cond { get; set; } = [];
+            public List<ItemValue> Field { get; set; } = [];
         }
         private class Template
         {
             public string? Filename { get; set; }
             public string Sheetname { get; set; } = "";
-            public List<Item> Item { get; set; } = new();
+            public List<Item> Item { get; set; } = [];
         }
+
+        private readonly JsonSerializerOptions options = new()
+        {
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        };
         private void ButtonExcel_Click(object sender, EventArgs e)
         {
             if (null == comboBoxTemplate.SelectedItem)
             {
                 return;
             }
-            List<string[]> list = new();
+            List<string[]> list = [];
             try
             {
                 string _filename = $"{Application.StartupPath}\\template\\{comboBoxTemplate.SelectedItem}.json";
                 FileStream fs = new(_filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                Template? template = JsonSerializer.Deserialize<Template>(fs, new JsonSerializerOptions()
-                {
-                    Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-                });
+                Template? template = JsonSerializer.Deserialize<Template>(fs, options);
                 fs.Close();
                 fs.Dispose();
 
@@ -93,7 +95,7 @@ namespace WebAuto
                     return;
                 }
                 string sheetname = template.Sheetname;
-                string file = template.Filename ?? Store.GetInstance().GetValue("TemplateDefaultExelFilename");
+                string file = template.Filename ?? Store.Instance.GetValue("TemplateDefaultExelFilename");
                 if (!File.Exists(file))
                 {
                     Program.ShowBalloonTip("WebAuto", $"EXCELファイル({file})が見つかりませんでした。", ToolTipIcon.Error);
@@ -110,21 +112,17 @@ namespace WebAuto
                 {
                     if (sheetname != reader.Name)
                     {
-                        reader.NextResult();
+                        _ = reader.NextResult();
                         continue;
                     }
                     int maxnum = (int)numericUpDownMaxnum.Value;
-                    List<string> header = new();
+                    List<string> header = [];
                     bool bHead = true;
                     while (reader.Read())
                     {
-                        if (maxnum <= 0)
-                        {
-                            maxnum = reader.FieldCount;
-                        }
                         Dictionary<string, string> data = new()
                         {
-                            { "UserName", Store.GetInstance().GetValue("TemplateUserName") }
+                            { "UserName", Store.Instance.GetValue("TemplateUserName") }
                         };
                         for (int j = 0; j < reader.FieldCount; j++)
                         {
@@ -180,10 +178,9 @@ namespace WebAuto
                 {
                     foreach (ItemValue element in item.Field)
                     {
-                        string value = Regex.Replace(element.Value, "#\\{(.*)\\}", m0 =>
-                            data.ContainsKey(m0.Groups[1].Value) ? data[m0.Groups[1].Value] : m0.Value
-                        );
-                        list.Add(new string[] { element.Name, element.Name, value });
+                        string value = RegexName().Replace(element.Value, m0 =>
+                            data.TryGetValue(m0.Groups[1].Value, out string? value) ? value : m0.Value);
+                        list.Add([element.Name, element.Name, value]);
                     }
                     --maxnum;
                     if (maxnum <= 0)
@@ -205,10 +202,13 @@ namespace WebAuto
 
         private void ButtonCancel_Click(object sender, EventArgs e)
         {
-            if (null != Parent && Parent.FindForm() is FormBrowser owner)
+            if (Parent?.FindForm() is FormBrowser owner)
             {
                 owner.CancelInputData();
             }
         }
+
+        [GeneratedRegex("#\\{(.*)\\}")]
+        private static partial Regex RegexName();
     }
 }

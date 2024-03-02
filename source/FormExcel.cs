@@ -13,7 +13,7 @@ namespace WebAuto
         }
         private void ButtonInput_Click(object sender, EventArgs e)
         {
-            if (null != Parent && Parent.FindForm() is FormBrowser owner)
+            if (Parent!.FindForm() is FormBrowser owner)
             {
                 buttonInput.Visible = false;
                 buttonCancel.Visible = true;
@@ -51,7 +51,7 @@ namespace WebAuto
         }
         private void SetSheetData()
         {
-            if (null != comboBoxSheet && comboBoxSheet.SelectedIndex >= 0)
+            if (comboBoxSheet?.SelectedIndex >= 0)
             {
                 string sheetname = comboBoxSheet.Items[comboBoxSheet.SelectedIndex]?.ToString() ?? "";
                 SetSheetData(sheetname);
@@ -71,7 +71,7 @@ namespace WebAuto
             MyDataGridViewInput.Enabled = true;
 
             bool bHeader = true;
-            List<DataGridViewRow> rows = new();
+            List<DataGridViewRow> rows = [];
             foreach ((List<string> val, DataGridViewRow dataGridViewRow)
                 in from List<string> val in list
                    let dataGridViewRow = new DataGridViewRow()
@@ -89,14 +89,14 @@ namespace WebAuto
                 }
                 else if (val.Count == 2)
                 {
-                    data[1] = val[0] ?? "";
-                    data[2] = val[1] ?? "";
+                    data[1] = val[0];
+                    data[2] = val[1];
                 }
                 else
                 {
-                    data[0] = val[0] ?? "";
-                    data[1] = val[1] ?? "";
-                    data[2] = val[2] ?? "";
+                    data[0] = val[0];
+                    data[1] = val[1];
+                    data[2] = val[2];
                 }
                 if (data[1].Length == 0)
                 {
@@ -116,7 +116,7 @@ namespace WebAuto
 
         private void ButtonCancel_Click(object sender, EventArgs e)
         {
-            if (null != Parent && Parent.FindForm() is FormBrowser owner)
+            if (Parent?.FindForm() is FormBrowser owner)
             {
                 owner.CancelInputData();
             }

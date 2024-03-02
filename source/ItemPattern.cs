@@ -14,7 +14,7 @@ namespace WebAuto
     public class ItemPattern
     {
         public string Name { get; set; } = "";
-        public List<ItemValue> Items { get; set; } = new List<ItemValue>();
+        public List<ItemValue> Items { get; set; } = [];
         public override string ToString()
         {
             return Name;
@@ -22,7 +22,7 @@ namespace WebAuto
     }
     public static class ItemPatternInfo
     {
-        public static List<ItemPattern> ItemPatterns { get; set; } = new();
+        public static List<ItemPattern> ItemPatterns { get; set; } = [];
 
         public static event Action<ItemPattern>? AddEvent;
 
@@ -31,6 +31,17 @@ namespace WebAuto
             ItemPatterns.Add(itemPattern);
             AddEvent?.Invoke(itemPattern);
         }
+        private static readonly JsonSerializerOptions options_load = new()
+        {
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true
+        };
+        private static readonly JsonSerializerOptions options_save = new()
+        {
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+            WriteIndented = true
+        };
 
         public static async Task Load()
         {
@@ -39,12 +50,7 @@ namespace WebAuto
             try
             {
                 using FileStream stream = new(store_file, FileMode.Open, FileAccess.Read);
-                List<ItemPattern>? tmpItemPatterns = await JsonSerializer.DeserializeAsync<List<ItemPattern>>(stream, new JsonSerializerOptions()
-                {
-                    Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-                    ReadCommentHandling = JsonCommentHandling.Skip,
-                    AllowTrailingCommas = true
-                });
+                List<ItemPattern>? tmpItemPatterns = await JsonSerializer.DeserializeAsync<List<ItemPattern>>(stream, options_load);
                 ItemPatterns.Clear();
                 if (tmpItemPatterns != null)
                 {
@@ -65,11 +71,7 @@ namespace WebAuto
             try
             {
                 using FileStream stream = new(store_file, FileMode.Create, FileAccess.Write);
-                await JsonSerializer.SerializeAsync(stream, ItemPatterns, new JsonSerializerOptions()
-                {
-                    Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-                    WriteIndented = true
-                });
+                await JsonSerializer.SerializeAsync(stream, ItemPatterns, options_save);
             }
             catch { }
         }

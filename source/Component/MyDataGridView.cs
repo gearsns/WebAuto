@@ -8,8 +8,10 @@ namespace WebAuto
 {
     internal class MyDataGridView : DataGridView
     {
-        public delegate void MyDataGridViewCellValueChangedHandler(object? sender, MyDataGridViewCellValueChangedEventArgs e);
+        public delegate void MyDataGridViewCellValueChangedHandler(object sender, MyDataGridViewCellValueChangedEventArgs e);
+        public delegate void MyDataGridViewBeginPasteFromClipboardHandler(object sender, MyDataGridViewBeginPasteFromClipboardEventArgs e);
         public event MyDataGridViewCellValueChangedHandler? MyDataGridViewCellValueChanged;
+        public event MyDataGridViewBeginPasteFromClipboardHandler? MyDataGridViewBeginPasteFromClipboard;
 
         private readonly Stack<ICommandPattern> m_undo = new();
         private readonly Stack<ICommandPattern> m_redo = new();
@@ -188,22 +190,17 @@ namespace WebAuto
                 try
                 {
                     int index = dgv.NewRowIndex;
-                    int num = 0;
                     foreach (DataGridViewRow r in dgv.SelectedRows)
                     {
                         if (index > r.Index)
                         {
                             index = r.Index;
                         }
-                        ++num;
-                    }
-                    if (num <= 0)
-                    {
-                        num = 1;
                     }
                     RedoClear();
                     m_undo.Push(new BeginCommand(dgv, y, x));
                     string[] values = new string[dgv.ColumnCount];
+                    int num = Math.Max(dgv.SelectedRows.Count, 1);
                     for (int i = 0; i < num; ++i)
                     {
                         dgv.Rows.Insert(index, values);
@@ -231,18 +228,13 @@ namespace WebAuto
                 e.SuppressKeyPress = true;
                 int newrowindex = dgv.NewRowIndex;
                 List<Point> select_cell = [];
-                bool bExists = false;
                 foreach (DataGridViewCell c in from DataGridViewCell c in dgv.SelectedCells
-                                               where c.RowIndex != newrowindex
+                                               where c.RowIndex != newrowindex && c.Visible
                                                select c)
                 {
-                    if (c.Visible)
-                    {
                         select_cell.Add(new Point(c.ColumnIndex, c.RowIndex));
-                        bExists = true;
                     }
-                }
-                if (!bExists)
+                if (select_cell.Count == 0)
                 {
                     return;
                 }
@@ -256,16 +248,18 @@ namespace WebAuto
                         preRow = pos.Y;
                         if (rows.Count > 0)
                         {
-                            data.Add(string.Join("\t", rows.ToArray()));
+                            data.Add(string.Join("\t", [.. rows]));
                             rows.Clear();
                         }
                     }
                     string? value = Convert.ToString(dgv[pos.X, pos.Y].Value);
-                    if (null == value)
+                    switch (value)
                     {
+                        case null:
                         rows.Add("\"\"");
-                    }
-                    else if (value.Contains('\n') || value.Contains('"') || value.Contains('\t'))
+                            break;
+                        default:
+                            if (value.Contains('\n') || value.Contains('"') || value.Contains('\t'))
                     {
                         rows.Add(string.Format("\"{0}\"", value.Replace("\"", "\"\"")));
                     }
@@ -277,12 +271,14 @@ namespace WebAuto
                     {
                         rows.Add(value);
                     }
+                            break;
+                    }
                 }
                 if (rows.Count > 0)
                 {
-                    data.Add(string.Join("\t", rows.ToArray()));
+                    data.Add(string.Join("\t", [.. rows]));
                 }
-                string cp = string.Join("\r\n", data.ToArray());
+                string cp = string.Join("\r\n", [.. data]);
                 if (string.IsNullOrEmpty(cp))
                 {
                     Clipboard.SetText("\r\n", TextDataFormat.Text);
@@ -296,6 +292,10 @@ namespace WebAuto
         }
         private void PasteFromClipboard(DataGridView dgv, KeyEventArgs e)
         {
+            PasteFromText(dgv, e, Clipboard.GetText());
+        }
+        private void PasteFromText(DataGridView dgv, EventArgs e, string text)
+        {
             if (dgv.ReadOnly)
             {
                 return;
@@ -308,8 +308,8 @@ namespace WebAuto
                 int iLeft = -1, iTop = -1, iRight = -1, iBottom = -1;
                 int newrowindex = dgv.NewRowIndex;
                 int iSelectNum = 0;
-                foreach (var c in
                 // 連続している範囲かチェック
+                foreach (DataGridViewCell c in
                 from DataGridViewCell c in dgv.SelectedCells
                 where c.ColumnIndex >= 0 && (c.RowIndex == newrowindex || (c.RowIndex != newrowindex/* && !dgv[c.ColumnIndex, c.RowIndex].ReadOnly*/))
                 select c)
@@ -358,27 +358,43 @@ namespace WebAuto
                         }
                     }
                 }
-                // クリップボードの内容を取得
-                string clipText = Clipboard.GetText();
                 // 改行を変換
-                clipText = clipText.Replace("\r\n", Environment.NewLine);
-                clipText = clipText.Replace("\r", Environment.NewLine);
+                text = text.Replace("\r\n", Environment.NewLine);
+                text = text.Replace("\r", Environment.NewLine);
                 // 改行で分割
                 CsvParserOptions csvParserOptions = new(false, '\t');
-                CsvReaderOptions csvReaderOptions = new(new[] { Environment.NewLine });
+                CsvReaderOptions csvReaderOptions = new([Environment.NewLine, "\n", "\r\n", "\n"]);
                 CsvDataMapping csvMapper = new();
                 CsvParser<CsvData> csvParser = new(csvParserOptions, csvMapper);
-                CsvMappingResult<CsvData>[] lines = csvParser.ReadFromString(csvReaderOptions, clipText).ToArray();
-                int iLineNum = lines.Length;
-                int startCiIndex = 0;
+                List<string[]> lines = [];
+                foreach (CsvMappingResult<CsvData>? line in csvParser.ReadFromString(csvReaderOptions, text))
+                {
+                    if (null == line)
+                    {
+                        lines.Add([]);
+                    }
+                    else
+                    {
+                        lines.Add(line.Result.Values ?? []);
+                    }
+                }
+                int iLineNum = lines.Count;
+                if (null != MyDataGridViewBeginPasteFromClipboard)
+                {
+                    MyDataGridViewBeginPasteFromClipboardEventArgs eEegin = new(e, lines);
+                    MyDataGridViewBeginPasteFromClipboard?.Invoke(this, eEegin);
+                    if (eEegin.ModifyRequested)
+                    {
+                        lines = eEegin.Lines;
+                    }
+                }
                 //
                 if (iLineNum == 1)
                 {
                     // lines １行の場合は、選択範囲すべてにコピーするようにする
                     // タブで分割
-                    string[]? vals = lines[0].Result.Values;
-                    if (iSelectNum == 1
-                        && vals != null)
+                    string[] vals = lines[0];
+                    if (iSelectNum == 1 && vals != null)
                     {
                         iRight = dgv.Columns.Count - 1;
                     }
@@ -394,7 +410,7 @@ namespace WebAuto
                             m_undo.Push(new NewLineCommand(dgv));
                             b_is_new_row = true;
                         }
-                        for (int c = iLeft, ci = startCiIndex; c <= iRight; ++c, ++ci)
+                        for (int c = iLeft, ci = 0; c <= iRight; ++c, ++ci)
                         {
                             if (vals == null || ci >= vals.Length)
                             {
@@ -430,34 +446,27 @@ namespace WebAuto
                         iRight = dgv.Columns.Count - 1;
                         iBottom = iTop + iLineNum - 1;
                     }
-                    else if (iBottom >= dgv.RowCount - 1 && dgv.AllowUserToAddRows == true)
+                    else
+                    {
+                        if (iBottom >= dgv.RowCount - 1 && dgv.AllowUserToAddRows == true)
                     {
                         iBottom = iTop + iLineNum - 1;
+                    }
                     }
                     for (int r = iTop, ri = 0; r <= iBottom; ++r, ++ri)
                     {
                         // タブで分割
-                        if (lines[ri].Result.Values is not string[] vals)
+                        if (lines[ri] is not string[] vals)
                         {
                             continue;
                         }
-                        int iRightMax = iRight; // Math.Min(iLeft + vals.GetLength(0) - 1, iRight);
+                        int iRightMax = iRight;
                         bool b_is_new_row = false;
                         // 行追加モード＆最終行の時は行追加
                         if (r == dgv.RowCount - 1 && dgv.AllowUserToAddRows == true)
                         {
                             // ×ブランクのみデータで行の追加は行わない
-                            bool bNoData = false;
-                            foreach (var _ in from string v in vals
-                                              let value = Convert.ToString(v)
-                                              where value != null && value.Length != 0
-                                              select new { })
-                            {
-                                bNoData = false;
-                                break;
-                            }
-
-                            if (bNoData)
+                            if (!vals.Any(v => v.Length > 0))
                             {
                                 continue;
                             }
@@ -465,7 +474,7 @@ namespace WebAuto
                             m_undo.Push(new NewLineCommand(dgv));
                             b_is_new_row = true;
                         }
-                        for (int c = iLeft, ci = startCiIndex; c <= iRightMax; ++c, ++ci)
+                        for (int c = iLeft, ci = 0; c <= iRightMax; ++c, ++ci)
                         {
                             if (ci >= vals.Length)
                             {
@@ -661,20 +670,7 @@ namespace WebAuto
                 string str = dgv[e.ColumnIndex, e.RowIndex].Value?.ToString() ?? "";
                 if (str.Contains('\t'))
                 {
-                    int max_col = dgv.Columns.Count;
-                    int col = e.ColumnIndex;
-                    foreach (string item in str.Split('\t'))
-                    {
-                        if (col >= max_col)
-                        {
-                            break;
-                        }
-                        object? pre_value = col == e.ColumnIndex ? m_pre_cell_value : dgv[col, e.RowIndex].Value;
-                        m_undo.Push(new PasteCommand(dgv, e.RowIndex, col, pre_value));
-                        dgv[col, e.RowIndex].Value = item;
-                        MyDataGridViewCellValueChanged?.Invoke(this, new MyDataGridViewCellValueChangedEventArgs(e, pre_value, dgv[col, e.RowIndex].Value, e.RowIndex, col, m_is_new_row));
-                        ++col;
-                    }
+                    PasteFromText(dgv, e, str);
                 }
                 else
                 {
@@ -726,29 +722,20 @@ namespace WebAuto
         void UnDo();
         void ReDo();
     }
-    public class BeginCommand : ICommandPattern
+    public class BeginCommand(DataGridView d, int r, int c) : ICommandPattern
     {
-        private readonly int row;
-        private readonly int col;
-        private readonly DataGridView dataGridView;
-        public BeginCommand(DataGridView d, int r, int c)
-        {
-            dataGridView = d;
-            row = r;
-            col = c;
-        }
         public void UnDo()
         {
-            if (col >= 0 && row >= 0)
+            if (c >= 0 && r >= 0)
             {
-                dataGridView.CurrentCell = dataGridView[col, row];
+                d.CurrentCell = d[c, r];
             }
         }
         public void ReDo()
         {
-            if (col >= 0 && row >= 0)
+            if (c >= 0 && r >= 0)
             {
-                dataGridView.CurrentCell = dataGridView[col, row];
+                d.CurrentCell = d[c, r];
             }
         }
     }
@@ -758,25 +745,19 @@ namespace WebAuto
         public void UnDo() { }
         public void ReDo() { }
     }
-    public class RowOriginComparer : System.Collections.IComparer
+    public class RowOriginComparer(Dictionary<DataGridViewRow, int> l) : System.Collections.IComparer
     {
-        private readonly Dictionary<DataGridViewRow, int> row_list;
-        public RowOriginComparer(Dictionary<DataGridViewRow, int> l)
-        {
-            row_list = l;
-        }
-
         public int Compare(object? x, object? y)
         {
             int i1 = -1;
-            if (x is DataGridViewRow DataGridViewRow1 && row_list.ContainsKey(DataGridViewRow1))
+            if (x is DataGridViewRow DataGridViewRow1 && l.TryGetValue(DataGridViewRow1, out int value1))
             {
-                i1 = row_list[DataGridViewRow1];
+                i1 = value1;
             }
             int i2 = -1;
-            if (y is DataGridViewRow DataGridViewRow2 && row_list.ContainsKey(DataGridViewRow2))
+            if (y is DataGridViewRow DataGridViewRow2 && l.TryGetValue(DataGridViewRow2, out int value2))
             {
-                i2 = row_list[DataGridViewRow2];
+                i2 = value2;
             }
             return i1 - i2;
         }
@@ -784,7 +765,7 @@ namespace WebAuto
     public class SortCommand : ICommandPattern
     {
         private readonly DataGridView dataGridView;
-        private readonly Dictionary<DataGridViewRow, int> row_list = new();
+        private readonly Dictionary<DataGridViewRow, int> row_list = [];
         private System.Collections.IComparer RowComparer;
         public SortCommand(DataGridView d, System.Collections.IComparer comp)
         {
@@ -815,36 +796,26 @@ namespace WebAuto
         }
     }
 
-    public class PasteCommand : ICommandPattern
+    public class PasteCommand(DataGridView d, int r, int c, object? v) : ICommandPattern
     {
-        private readonly int row;
-        private readonly int col;
-        private object? val;
-        private Color color;
-        private readonly DataGridView dataGridView;
-        public PasteCommand(DataGridView d, int r, int c, object? v)
-        {
-            dataGridView = d;
-            row = r;
-            col = c;
-            val = v;
-            color = d[c, r].Style.BackColor;
-        }
+        private object? val = v;
+        private Color color = d[c, r].Style.BackColor;
+
         public void UnDo()
         {
-            object v = dataGridView[col, row].Value;
-            dataGridView[col, row].Value = val;
-            Color now_color = dataGridView[col, row].Style.BackColor;
-            dataGridView[col, row].Style.BackColor = color;
+            object v = d[c, r].Value;
+            d[c, r].Value = val;
+            Color now_color = d[c, r].Style.BackColor;
+            d[c, r].Style.BackColor = color;
             val = v;
             color = now_color;
         }
         public void ReDo()
         {
-            object v = dataGridView[col, row].Value;
-            dataGridView[col, row].Value = val;
-            Color now_color = dataGridView[col, row].Style.BackColor;
-            dataGridView[col, row].Style.BackColor = color;
+            object v = d[c, r].Value;
+            d[c, r].Value = val;
+            Color now_color = d[c, r].Style.BackColor;
+            d[c, r].Style.BackColor = color;
             val = v;
             color = now_color;
         }
@@ -899,41 +870,34 @@ namespace WebAuto
             dataGridView.Rows.Insert(row, clonedRow);
         }
     }
-    public class NewLineCommand : ICommandPattern
+    public class NewLineCommand(DataGridView d) : ICommandPattern
     {
-        private readonly DataGridView dataGridView;
-        public NewLineCommand(DataGridView d)
-        {
-            dataGridView = d;
-        }
         public void UnDo()
         {
-            dataGridView.RowCount -= 1;
+            d.RowCount -= 1;
         }
         public void ReDo()
         {
-            dataGridView.RowCount += 1;
+            d.RowCount += 1;
         }
     }
-    public class MyDataGridViewCellValueChangedEventArgs : EventArgs
+    public class MyDataGridViewCellValueChangedEventArgs(EventArgs? ea, object? f, object? t, int r, int c, bool n) : EventArgs
     {
-        public MyDataGridViewCellValueChangedEventArgs(EventArgs? ea, object? f, object? t, int r, int c, bool n)
-        {
-            FromValue = f;
-            ToValue = t;
-            ColumnIndex = c;
-            RowIndex = r;
-            IsNewRow = n;
-        }
+        public EventArgs? FromEventArgs => ea;
+        public object? FromValue { get; } = f;
 
-        public object? FromValue { get; }
+        public object? ToValue { get; } = t;
 
-        public object? ToValue { get; }
+        public int ColumnIndex { get; } = c;
 
-        public int ColumnIndex { get; }
+        public int RowIndex { get; } = r;
 
-        public int RowIndex { get; }
-
-        public bool IsNewRow { get; }
+        public bool IsNewRow { get; } = n;
+    }
+    public class MyDataGridViewBeginPasteFromClipboardEventArgs(EventArgs? ea, List<string[]> f) : EventArgs
+    {
+        public EventArgs? FromEventArgs => ea;
+        public List<string[]> Lines { get; set; } = f;
+        public bool ModifyRequested { get; set; }
     }
 }

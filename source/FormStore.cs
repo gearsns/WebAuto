@@ -75,7 +75,7 @@ namespace WebAuto
 
         private void ButtonInput_Click(object sender, EventArgs e)
         {
-            if (null != Parent && Parent.FindForm() is FormBrowser owner)
+            if (Parent?.FindForm() is FormBrowser owner)
             {
                 SwitchButton(false);
                 owner.InputData(MyDataGridViewInput, () =>
@@ -120,7 +120,7 @@ namespace WebAuto
         private void SetData(List<ItemValue> items)
         {
             ClearData();
-            List<DataGridViewRow> rows = new();
+            List<DataGridViewRow> rows = [];
             foreach (ItemValue item in items)
             {
                 DataGridViewRow dataGridViewRow = new();
@@ -130,7 +130,7 @@ namespace WebAuto
                 });
                 rows.Add(dataGridViewRow);
             }
-            MyDataGridViewInput.Rows.AddRange(rows.ToArray());
+            MyDataGridViewInput.Rows.AddRange([.. rows]);
         }
         private void ComboBoxSheet_SelectedIndexChanged(object sender, EventArgs e)
         {
@@ -150,7 +150,7 @@ namespace WebAuto
 
         private void ButtonCancel_Click(object sender, EventArgs e)
         {
-            if (null != Parent && Parent.FindForm() is FormBrowser owner)
+            if (Parent?.FindForm() is FormBrowser owner)
             {
                 owner.CancelInputData();
             }
@@ -170,7 +170,6 @@ namespace WebAuto
                 Program.ShowBalloonTip("WebAuto", "対象ページが表示されていません。");
                 return;
             }
-            Dictionary<string, string> script_files = [];
             try
             {
                 string filename = Path.GetFullPath(@".\script\extract.js");
@@ -257,7 +256,7 @@ namespace WebAuto
                 {
                     MyDataGridViewInput.Columns[i].HeaderText = table_header_name[i];
                 }
-                MyDataGridViewInput.Rows.AddRange(rows.ToArray());
+                MyDataGridViewInput.Rows.AddRange([.. rows]);
 
                 ItemPattern itemPattern = new();
                 foreach (DataGridViewRow item in MyDataGridViewInput.Rows)
@@ -271,8 +270,7 @@ namespace WebAuto
                 }
                 if (itemPattern.Items.Count > 0)
                 {
-                    ItemPattern? item = ItemPatternInfo.ItemPatterns.FirstOrDefault(item => item.Name == "一時保存");
-                    if (null != item)
+                    if (ItemPatternInfo.ItemPatterns.FirstOrDefault(item => item.Name == "一時保存") is ItemPattern item)
                     {
                         ItemPatternInfo.ItemPatterns.Remove(item);
                     }

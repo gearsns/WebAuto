@@ -24,11 +24,11 @@ namespace WebAuto
 
         public void SetStoreValue(string key, string value, bool isCypt)
         {
-            Store.GetInstance().SetValue(key, value, isCypt);
+            Store.Instance.SetValue(key, value, isCypt);
         }
         public string GetStoreValue(string key)
         {
-            return Store.GetInstance().GetValue(key);
+            return Store.Instance.GetValue(key);
         }
         public void CompletedScript()
         {
@@ -37,7 +37,7 @@ namespace WebAuto
 
         public async void DownloadFileAsync(string filename, string url)
         {
-            string outputPath = Store.GetInstance().GetValue("WebAutoOutputFolder");
+            string outputPath = Store.Instance.GetValue("WebAutoOutputFolder");
             if (string.IsNullOrEmpty(outputPath))
             {
                 return;
@@ -48,40 +48,14 @@ namespace WebAuto
             {
                 IsResourceLoadingEnabled = true,
             });
-            Dictionary<string, string> cookies_map = [];
             using IBrowsingContext context = BrowsingContext.New(config);
-            await _browserTabUserControl.Invoke(async () =>
-            {
-                foreach (Microsoft.Web.WebView2.Core.CoreWebView2Cookie? cookie
-                    in await _browserTabUserControl.WebView2.CoreWebView2.CookieManager.GetCookiesAsync(""))
-                {
-                    if(null != cookie)
-                    {
-                        if (cookies_map.ContainsKey(cookie.Domain))
-                        {
-                            cookies_map[cookie.Domain] += $@"{cookie.Name}={cookie.Value},";
-                        }
-                        else
-                        {
-                            cookies_map.Add(cookie.Domain, $@"{cookie.Name}={cookie.Value},");
-                        }
-                    }
-                }
-            });
-            foreach (KeyValuePair<string, string> item in cookies_map)
-            {
-                try
-                {
-                    context.SetCookie(new AngleSharp.Dom.Url($"https://{item.Key}"), item.Value);
-                }
-                catch { }
-            }
+            CookieSessionStore.Instance.AddOrUpdateCookie(context);
             try
             {
                 DocumentRequest req = DocumentRequest.Get(new AngleSharp.Dom.Url(url));
                 IDocumentLoader? loader = context.GetService<IDocumentLoader>();
                 IDownload download = loader!.FetchAsync(req);
-                using AngleSharp.Io.IResponse response = await download.Task;
+                using IResponse response = await download.Task;
                 // Headersで判定
                 if (response.StatusCode == HttpStatusCode.OK)
                 {

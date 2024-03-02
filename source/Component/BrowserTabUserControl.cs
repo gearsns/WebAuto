@@ -1,6 +1,5 @@
 ﻿using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
-using System;
 using System.Text;
 
 namespace WebAuto
@@ -14,38 +13,23 @@ namespace WebAuto
         public BrowserTabUserControl()
         {
             InitializeComponent();
-            SetEventHandle();
         }
 
         public BrowserTabUserControl(string url)
         {
             InitializeComponent();
             InitUrl = url;
-            SetEventHandle();
         }
 
         public BrowserTabUserControl(CoreWebView2NewWindowRequestedEventArgs e)
         {
             InitializeComponent();
-            SetEventHandle();
             CoreWebView2Deferral deferral = e.GetDeferral();
             WebViewFirstInitialized += (s, args) =>
             {
                 e.NewWindow = webView2.CoreWebView2;
                 e.Handled = true;
                 deferral.Complete();
-            };
-        }
-
-        private void SetEventHandle()
-        {
-            Disposed += (s, args) =>
-            {
-                if(webView2 != null)
-                {
-                    Controls.Remove(webView2);
-                    webView2.Dispose();
-                }
             };
         }
 
@@ -58,10 +42,7 @@ namespace WebAuto
         public async Task ExecuteScriptAsync(string script, CancellationTokenSource CancellationTokenSource)
         {
             IsScriptRunning = true;
-            await Invoke(async () =>
-            {
-                await webView2.CoreWebView2.ExecuteScriptAsync(script);
-            });
+            await Invoke(async () => await webView2.CoreWebView2.ExecuteScriptAsync(script));
             await Task.Run(() =>
             {
                 while (IsScriptRunning)
@@ -95,10 +76,14 @@ namespace WebAuto
         private void WebView2_CoreWebView2InitializationCompleted(object sender, CoreWebView2InitializationCompletedEventArgs e)
         {
             CoreWebView2 coreWebView2 = webView2.CoreWebView2;
+            try
+            {
             foreach (string name in Directory.GetDirectories(Path.GetFullPath(@".\contents")))
             {
                 coreWebView2.SetVirtualHostNameToFolderMapping(Path.GetFileName(name), name, CoreWebView2HostResourceAccessKind.Allow);
             }
+            }
+            catch { }
             coreWebView2.NewWindowRequested += CoreWebView2_NewWindowRequested;
             coreWebView2.WindowCloseRequested += CoreWebView2_WindowCloseRequested;
             coreWebView2.DocumentTitleChanged += CoreWebView2_DocumentTitleChanged;
@@ -110,11 +95,11 @@ namespace WebAuto
             coreWebView2.FrameNavigationCompleted += CoreWebView2_FrameNavigationCompleted;
             coreWebView2.HistoryChanged += CoreWebView2_HistoryChanged;
             coreWebView2.ContextMenuRequested += CoreWebView2_ContextMenuRequested;
+            coreWebView2.Settings.AreHostObjectsAllowed = true;
             coreWebView2.Settings.IsPasswordAutosaveEnabled = true;
             coreWebView2.Settings.IsStatusBarEnabled = false;
-            coreWebView2.Settings.AreHostObjectsAllowed = true;
             coreWebView2.Settings.IsWebMessageEnabled = true;
-            CookieSessionStore cookieSessionStore = CookieSessionStore.GetInstance();
+            CookieSessionStore cookieSessionStore = CookieSessionStore.Instance;
             cookieSessionStore.AddOrUpdateCookie(webView2.CoreWebView2.CookieManager);
             WebViewFirstInitialized?.Invoke(this, new EventArgs());
             if (!loaded_script_contents_is)
@@ -130,10 +115,10 @@ namespace WebAuto
 
         private void CoreWebView2_ContextMenuRequested(object? sender, CoreWebView2ContextMenuRequestedEventArgs e)
         {
-            IList<CoreWebView2ContextMenuItem> menuList = e.MenuItems;
             CoreWebView2ContextMenuTargetKind context = e.ContextMenuTarget.Kind;
             if (e.ContextMenuTarget.HasLinkUri)
             {
+                IList<CoreWebView2ContextMenuItem> menuList = e.MenuItems;
                 int index = 0;
                 for (; index < menuList.Count; index++)
                 {
@@ -183,7 +168,7 @@ namespace WebAuto
             });
         }
 
-        private void CoreWebView2_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
+        private void LoadStarting()
         {
             Invoke(() =>
             {
@@ -197,7 +182,7 @@ namespace WebAuto
                 }
             });
         }
-        private void CoreWebView2_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+        private void LoadCompleted()
         {
             _ = Invoke(async () =>
             {
@@ -210,59 +195,41 @@ namespace WebAuto
                 {
                     tabPage.Loading = false;
                 }
-                CookieSessionStore cookieSessionStore = CookieSessionStore.GetInstance();
+                CompletedScript();
+                CookieSessionStore cookieSessionStore = CookieSessionStore.Instance;
                 _ = await cookieSessionStore.StoreCookies(webView2.CoreWebView2.CookieManager);
             });
+        }
+
+        private void CoreWebView2_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
+                {
+            LoadStarting();
+                }
+        private void CoreWebView2_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+                {
+            LoadCompleted();
         }
 
         private void CoreWebView2_FrameNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
-        {
-            Invoke(() =>
             {
-                if (FindForm() is FormBrowser owner)
-                {
-                    owner.SetIsLoading(this, true);
+            LoadStarting();
                 }
-                if (Parent is LoadingTabPage tabPage)
-                {
-                    tabPage.Loading = true;
-                }
-            });
-        }
 
         private void CoreWebView2_FrameNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
-        {
-            _ = Invoke(async () =>
-            {
-                if (FindForm() is FormBrowser owner)
                 {
-                    owner.SetCanGoBackAndForward(CanGoBack, CanGoForward);
-                    owner.SetIsLoading(this, false);
-                }
-                if (Parent is LoadingTabPage tabPage)
-                {
-                    tabPage.Loading = false;
-                }
-                CookieSessionStore cookieSessionStore = CookieSessionStore.GetInstance();
-                _ = await cookieSessionStore.StoreCookies(webView2.CoreWebView2.CookieManager);
-            });
+            LoadCompleted();
             LoadEnd = true;
         }
 
-        private void DisplayOutput(string output)
+        private void CoreWebView2_StatusBarTextChanged(object? sender, object e)
         {
             Invoke(() => 
             {
                 if (FindForm() is FormBrowser owner)
                 {
-                    owner.SetStatusText(this, output);
+                    owner.SetStatusText(this, webView2.CoreWebView2.StatusBarText);
                 }
             });
-        }
-
-        private void CoreWebView2_StatusBarTextChanged(object? sender, object e)
-        {
-            DisplayOutput(webView2.CoreWebView2.StatusBarText);
         }
 
         private void CoreWebView2_DocumentTitleChanged(object? sender, object e)
@@ -286,6 +253,7 @@ namespace WebAuto
             {
                 if (FindForm() is FormBrowser owner && Parent is TabPage tabPage)
                 {
+                    owner.SelectPrevTab(tabPage);
                     owner.RemoveTab(tabPage);
                 }
             });
@@ -295,9 +263,9 @@ namespace WebAuto
         {
             Invoke(() =>
             {
-                if (FindForm() is FormBrowser owner)
+                if (FindForm() is FormBrowser owner && Parent is TabPage tabPage)
                 {
-                    owner.AddTab(e);
+                    owner.AddTab(e, tabPage);
                 }
             });
         }
@@ -321,7 +289,11 @@ namespace WebAuto
                 catch { }
             }
             CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(null, null, options);
+            try
+            {
             await webView2.EnsureCoreWebView2Async(env);
+            }
+            catch { }
             if(InitUrl.Length > 0)
             {
                 try

@@ -14,8 +14,7 @@
             TopLevel = false;
             control.Controls.Add(this);
             textBoxName.Text = name;
-            Size = control.Size;
-            Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom;
+            Dock = DockStyle.Fill;
             Show();
             BringToFront();
             _ = textBoxName.Focus();

@@ -17,7 +17,7 @@ namespace WebAuto
             // To customize application configuration such as set high DPI settings or default font,
             // see https://aka.ms/applicationconfiguration.
             ApplicationConfiguration.Initialize();
-            CookieSessionStore cookieSessionStore = CookieSessionStore.GetInstance();
+            CookieSessionStore cookieSessionStore = CookieSessionStore.Instance;
             _ = cookieSessionStore.Load();
             mainForm = new FormBrowser();
             Application.Run(mainForm);

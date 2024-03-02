@@ -70,7 +70,7 @@
             // 
             lblMsg.AutoSize = true;
             lblMsg.BackColor = Color.Transparent;
-            lblMsg.Font = new Font("Yu Gothic UI", 12F, FontStyle.Regular, GraphicsUnit.Point);
+            lblMsg.Font = new Font("Yu Gothic UI", 12F);
             lblMsg.ForeColor = Color.White;
             lblMsg.Location = new Point(58, 42);
             lblMsg.Name = "lblMsg";
@@ -82,7 +82,7 @@
             // 
             lblTitle.AutoSize = true;
             lblTitle.BackColor = Color.Transparent;
-            lblTitle.Font = new Font("Yu Gothic UI", 12F, FontStyle.Bold, GraphicsUnit.Point);
+            lblTitle.Font = new Font("Yu Gothic UI", 12F, FontStyle.Bold);
             lblTitle.ForeColor = Color.White;
             lblTitle.Location = new Point(26, 4);
             lblTitle.Name = "lblTitle";
@@ -118,7 +118,6 @@
             ShowInTaskbar = false;
             Text = "NotifyWindow";
             TopMost = true;
-            Load += NotifyWindow_Load;
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox3).EndInit();

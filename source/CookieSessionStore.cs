@@ -1,4 +1,5 @@
-﻿using Microsoft.Web.WebView2.Core;
+﻿using AngleSharp;
+using Microsoft.Web.WebView2.Core;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Unicode;
@@ -12,11 +13,7 @@ namespace WebAuto
 #else
         private readonly string _filename = Path.Combine(Application.UserAppDataPath, "..\\store\\cookie.json");
 #endif
-        private static readonly CookieSessionStore _cookieSessionStore = new();
-        public static CookieSessionStore GetInstance()
-        {
-            return _cookieSessionStore;
-        }
+        public static CookieSessionStore Instance { get; } = new();
         private class ItemInfo
         {
             public string Name { get; set; } = "";
@@ -25,7 +22,10 @@ namespace WebAuto
             public string Path { get; set; } = "";
         }
         private readonly List<ItemInfo> _itemList = [];
-
+        private static readonly JsonSerializerOptions options = new()
+        {
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        };
         public bool Load()
         {
             try
@@ -33,16 +33,13 @@ namespace WebAuto
                 if (File.Exists(_filename))
                 {
                     // 8時間以上前のcookieは読み込まない
-                    if (File.GetLastWriteTime(_filename) > DateTime.Now.AddHours(-8))
+                    if (File.GetLastWriteTime(_filename) < DateTime.Now.AddHours(-8))
                     {
                         _itemList.Clear();
                         return true;
                     }
                     FileStream fs = new(_filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    List<ItemInfo>? tmpList = JsonSerializer.Deserialize<List<ItemInfo>>(fs, new JsonSerializerOptions()
-                    {
-                        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-                    });
+                    List<ItemInfo>? tmpList = JsonSerializer.Deserialize<List<ItemInfo>>(fs, options);
                     fs.Close();
                     fs.Dispose();
                     _itemList.Clear();
@@ -63,11 +60,13 @@ namespace WebAuto
         {
             try
             {
-                FileStream fs = new(_filename, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
-                JsonSerializer.Serialize(fs, _itemList, new JsonSerializerOptions()
+                _ = Directory.CreateDirectory($"{Path.GetDirectoryName(_filename)}");
+            }
+            catch { }
+            try
                 {
-                    Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-                });
+                FileStream fs = new(_filename, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+                JsonSerializer.Serialize(fs, _itemList, options);
                 fs.Close();
                 fs.Dispose();
             }
@@ -83,6 +82,17 @@ namespace WebAuto
             {
                 CoreWebView2Cookie cookie = coreWebView2CookieManager.CreateCookie(item.Name, item.Value, item.Domain, item.Path);
                 coreWebView2CookieManager.AddOrUpdateCookie(cookie);
+            }
+        }
+        public void AddOrUpdateCookie(IBrowsingContext context)
+        {
+            foreach (ItemInfo item in _itemList)
+            {
+                try
+                {
+                    context.SetCookie(new AngleSharp.Dom.Url($"https://{item.Domain}/{item.Path}"), $"{item.Name}={item.Value}");
+                }
+                catch { }
             }
         }
         public async Task<bool> StoreCookies(CoreWebView2CookieManager coreWebView2CookieManager)

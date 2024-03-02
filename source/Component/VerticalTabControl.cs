@@ -73,7 +73,7 @@ namespace WebAuto
                     stopRunning = false;
                     Rectangle r = GetTabRect(i);
                     int iconSize = r.Height;
-                    this.Invalidate(new Rectangle(r.Right - iconSize, r.Top, iconSize, iconSize));
+                    Invalidate(new Rectangle(r.Right - iconSize, r.Top, iconSize, iconSize));
                 }
             }
             if (stopRunning)

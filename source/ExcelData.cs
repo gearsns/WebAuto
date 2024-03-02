@@ -7,7 +7,7 @@ namespace WebAuto
     {
         private readonly Button targetButton;
         private readonly ComboBox targetComboBox;
-        private readonly Dictionary<string, List<List<string>>> Data = new();
+        private readonly Dictionary<string, List<List<string>>> Data = [];
         public ExcelData(ref Button button, ref ComboBox comboBox)
         {
             targetButton = button;
@@ -15,7 +15,7 @@ namespace WebAuto
         }
         public List<List<string>> Get(string sheetName)
         {
-            return Data.ContainsKey(sheetName) ? Data[sheetName] : new List<List<string>>();
+            return Data.TryGetValue(sheetName, out List<List<string>>? value) ? value : [];
         }
 
         public bool Load(string filename)
@@ -27,7 +27,7 @@ namespace WebAuto
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             try
             {
-                using FileStream stream = File.Open(filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using FileStream stream = new(filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 IExcelDataReader reader;
 
                 //ファイルの拡張子を確認
@@ -59,19 +59,13 @@ namespace WebAuto
                 for (int i = 0; i < reader.ResultsCount; i++)
                 {
                     string sheetName = reader.Name;
-                    List<List<string>> lines = new();
+                    List<List<string>> lines = [];
                     while (reader.Read())
                     {
-                        List<string> line = new();
+                        List<string> line = [];
                         for (int j = 0; j < reader.FieldCount; j++)
                         {
-                            if (reader.GetValue(j) is object v)
-                            {
-                                line.Add(v.ToString() ?? "");
-                            } else
-                            {
-                                line.Add("");
-                            }
+                            line.Add(reader.GetValue(j) is object v ? v.ToString() ?? "" : "");
                         }
                         lines.Add(line);
                     }
@@ -108,9 +102,9 @@ namespace WebAuto
         {
             if (e.Data != null && e.Data.GetData(DataFormats.FileDrop, false) is string[] files)
             {
-                for (int i = 0; i < files.Length; i++)
+                foreach (string v in files)
                 {
-                    if (Load(files[i]))
+                    if (Load(v))
                     {
                         return true;
                     }

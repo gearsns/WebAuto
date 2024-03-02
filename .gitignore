@@ -5,3 +5,9 @@
 /.vs/WebAuto
 /obj
 /WebAuto.csproj.user
+/.vs/ProjectEvaluation
+/bin/Debug/net8.0-windows
+/source/.vs/WebAuto
+/source/bin/Debug/net8.0-windows
+/source/obj
+/source/WebAuto.csproj.user
